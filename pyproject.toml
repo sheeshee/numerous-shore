@@ -1,0 +1,16 @@
+[project]
+name = "numerous-shore"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "adafruit-ampy>=1.1.0",
+    "rshell>=0.0.36",
+]
+
+[dependency-groups]
+dev = [
+    "micropython-rp2-rpi-pico-w-stubs>=1.25.0.post1",
+    "ruff>=0.11.8",
+]
