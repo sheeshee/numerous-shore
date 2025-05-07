@@ -62,26 +62,18 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "adafruit-ampy" },
+    { name = "micropython-rp2-rpi-pico-w-stubs" },
     { name = "picozero" },
     { name = "rshell" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "micropython-rp2-rpi-pico-w-stubs" },
     { name = "ruff" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "adafruit-ampy", specifier = ">=1.1.0" },
+    { name = "micropython-rp2-rpi-pico-w-stubs", specifier = ">=1.25.0.post1" },
     { name = "picozero", specifier = ">=0.4.2" },
     { name = "rshell", specifier = ">=0.0.36" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "micropython-rp2-rpi-pico-w-stubs", specifier = ">=1.25.0.post1" },
     { name = "ruff", specifier = ">=0.11.8" },
 ]
 
