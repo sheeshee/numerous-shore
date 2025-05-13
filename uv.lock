@@ -98,6 +98,20 @@ wheels = [
 ]
 
 [[package]]
+name = "mpy-cross"
+version = "1.25.0.post2"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/94/93863dfa4114876f63955b5861a79ad9c19d8cf47dfef6027218c3ea66b8/mpy_cross-1.25.0.post2-py2.py3-none-macosx_11_0_universal2.whl", hash = "sha256:42c9e570b414cf2bc011bf7ba0cce1fa58c288132886311d92e44ace0f4bc3ae", size = 1810880 },
+    { url = "https://files.pythonhosted.org/packages/28/46/4830367c63ccb35ff244391d982a30bc7b26319f1e5c36eaf31430258e76/mpy_cross-1.25.0.post2-py2.py3-none-manylinux1_i686.whl", hash = "sha256:167c8d8e18cde654103e8b268c06e8e025e3d2ed51dfcf3a1517eda0a709a927", size = 1042544 },
+    { url = "https://files.pythonhosted.org/packages/c6/a3/174991726b2700ec92fd0f599c9404142736bbbb29cf197dbf5db50ce1de/mpy_cross-1.25.0.post2-py2.py3-none-manylinux1_x86_64.whl", hash = "sha256:77235a2b63c3e96dba8681e3b7026418053688a46c57df5702b77c07d5b83c23", size = 1048352 },
+    { url = "https://files.pythonhosted.org/packages/f2/73/6060eb6b5df36a05b86266e8c17f50792ae70e2e822c204994d44a79b5ea/mpy_cross-1.25.0.post2-py2.py3-none-manylinux2014_aarch64.whl", hash = "sha256:0a9dbb7fb87f73af0282f233a66c79a6e408cbdfa86c94f0da532243614abbb0", size = 1141313 },
+    { url = "https://files.pythonhosted.org/packages/13/55/9acf36f56d411860834d11bfcb2067a90d7c9614e076a3b46e57624b05cc/mpy_cross-1.25.0.post2-py2.py3-none-manylinux2014_armv7l.whl", hash = "sha256:a8908a95f540e1a6c062b5affcd43018f9c1c7c1cf52ed0ce88080fec559e9da", size = 1050501 },
+    { url = "https://files.pythonhosted.org/packages/52/8e/0f8a093fd23b2884dec2570b6168a49a6d05d9820a924edc9684da8e24b5/mpy_cross-1.25.0.post2-py2.py3-none-win32.whl", hash = "sha256:e08b24a05ea04fcac28bb8788d5adbc0fa90863f094fb09b99409112d81ab712", size = 1077885 },
+    { url = "https://files.pythonhosted.org/packages/1d/5c/848694b9fbaa75ebe01cf13636983b7c5a061c400b56ce053549a3266549/mpy_cross-1.25.0.post2-py2.py3-none-win_amd64.whl", hash = "sha256:7a6ff4d7db33edf89b411dd676d19d089d572faaa1bb778e4fc6fd2cbd72d85b", size = 1161591 },
+]
+
+[[package]]
 name = "numerous-shore"
 version = "0.1.0"
 source = { virtual = "." }
@@ -106,6 +120,7 @@ dependencies = [
     { name = "micropython-rp2-rpi-pico-w-stubs" },
     { name = "mpr" },
     { name = "mpremote" },
+    { name = "mpy-cross" },
     { name = "picozero" },
     { name = "rshell" },
     { name = "ruff" },
@@ -117,6 +132,7 @@ requires-dist = [
     { name = "micropython-rp2-rpi-pico-w-stubs", specifier = ">=1.25.0.post1" },
     { name = "mpr", specifier = ">=1.31" },
     { name = "mpremote", specifier = ">=1.25.0" },
+    { name = "mpy-cross", specifier = ">=1.25.0.post2" },
     { name = "picozero", specifier = ">=0.4.2" },
     { name = "rshell", specifier = ">=0.0.36" },
     { name = "ruff", specifier = ">=0.11.8" },
