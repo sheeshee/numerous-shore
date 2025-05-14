@@ -1,7 +1,0 @@
-{
-	"urls": [],
-	"deps": [
-		["ssd1306", "latest"]
-	],
-	"version": "0.1.0"
-}
