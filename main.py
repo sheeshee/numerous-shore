@@ -1,8 +1,13 @@
 from time import sleep
 
-from machine import Pin, I2C
+from machine import Pin, I2C, RTC
 from network import WLAN, STA_IF
+
 import ssd1306
+import ntptime
+
+
+ntptime.timeout = 10
 
 
 # init display
@@ -37,6 +42,20 @@ else:
     print('Connection successful!')
     network_info = wlan.ifconfig()
     print('IP address:', network_info[0])
+
+
+print('Fetching time from NTP server...')
+ntptime.settime()
+print('Time set successfully!')
+
+# Display current time
+rtc = RTC()
+current_time = rtc.datetime()
+_, _, _, _, hour, minute, second, _ = rtc.datetime()
+display.fill(0)
+display.text('Current time:', 0, 0, 1)
+display.text(f"{hour} - {minute} - {second}", 0, 20, 1)
+display.show()
 
 
 # enter stable state
