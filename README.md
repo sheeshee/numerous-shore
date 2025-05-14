@@ -2,6 +2,20 @@
 
 An IoT alarm clock using Micropython on a RPi Pico W
 
+# Setup
+
+## Dependencies
+
+* uv
+
+## Wifi Credentials
+
+Create a file on the device called `credentials.txt` with your wifi credentials in the following format:
+```
+SSID
+PASSWORD
+```
+
 # Notes
 
 If ampy can't connect make the port usable again
@@ -13,3 +27,9 @@ Open REPL with minicom
 ```bash
 minicom -D /dev/ttyACM0 -b 115200
 ```
+
+Or even better with mpr:
+```bash
+mpr repl
+```
+
