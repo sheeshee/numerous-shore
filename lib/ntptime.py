@@ -1,3 +1,7 @@
+# MicroPython NTP time module
+# Sourced from https://github.com/micropython/micropython-lib/tree/master/micropython/net/ntptime
+# Original license applies
+
 from time import gmtime
 import socket
 import struct
