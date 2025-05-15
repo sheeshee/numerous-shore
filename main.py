@@ -1,11 +1,11 @@
 from time import sleep
 
-from machine import Pin, I2C, RTC
-from network import WLAN, STA_IF
-
-import ssd1306
 import ntptime
-
+import roboto
+import ssd1306
+from machine import I2C, RTC, Pin, Timer
+from network import STA_IF, WLAN
+from writer import Writer
 
 ntptime.timeout = 10
 
@@ -48,15 +48,20 @@ print('Fetching time from NTP server...')
 ntptime.settime()
 print('Time set successfully!')
 
-# Display current time
-rtc = RTC()
-current_time = rtc.datetime()
-_, _, _, _, hour, minute, second, _ = rtc.datetime()
-display.fill(0)
-display.text('Current time:', 0, 0, 1)
-display.text(f"{hour} - {minute} - {second}", 0, 20, 1)
-display.show()
+def display_time():
+    rtc = RTC()
+    _, _, _, _, hour, minute, _, _ = rtc.datetime()
+    display.fill(0)
+    writer = Writer(display, roboto, verbose=False)
+    Writer.set_textpos(display, 32, 0)
+    writer.printstring(f"{hour:02}:{minute:02}")
+    display.show()
 
+display_time()
+
+
+timer = Timer()
+timer.init(period=5000, mode=Timer.PERIODIC, callback=lambda t: display_time())
 
 # enter stable state
 led = Pin("LED", Pin.OUT)

@@ -142,7 +142,7 @@ class Writer():
             if pos > 0:
                 rstr = string[pos + 1:]
                 string = lstr
-                
+
         for char in string:
             self._printchar(char, invert)
         if rstr is not None:
@@ -187,7 +187,7 @@ class Writer():
                     break
             if mc + 1 == wd:
                 break  # All done: no trailing space
-        # print('Truelen', char, wd, mc + 1)  # TEST 
+        # print('Truelen', char, wd, mc + 1)  # TEST
         return mc + 1
 
     def _get_char(self, char, recurse):
@@ -227,7 +227,7 @@ class Writer():
         self.char_height = char_height
         self.char_width = char_width
         self.clip_width = char_width if np is None else np
-        
+
     # Method using blitting. Efficient rendering for monochrome displays.
     # Tested on SSD1306. Invert is for black-on-white rendering.
     def _printchar(self, char, invert=False, recurse=False):
