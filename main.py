@@ -61,7 +61,7 @@ display_time()
 
 
 timer = Timer()
-timer.init(period=5000, mode=Timer.PERIODIC, callback=lambda t: display_time())
+timer.init(period=5000, mode=Timer.PERIODIC, callback=lambda _: display_time())
 
 # enter stable state
 led = Pin("LED", Pin.OUT)
