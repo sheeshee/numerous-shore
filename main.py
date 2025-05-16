@@ -3,7 +3,7 @@ from time import sleep
 import ntptime
 import roboto
 import ssd1306
-from machine import I2C, RTC, Pin, Timer
+from machine import I2C, RTC, Pin, Timer, PWM
 from network import STA_IF, WLAN
 from writer import Writer
 
@@ -60,8 +60,26 @@ def display_time():
 display_time()
 
 
-timer = Timer()
-timer.init(period=5000, mode=Timer.PERIODIC, callback=lambda _: display_time())
+clock_setting_timer = Timer()
+clock_setting_timer.init(period=5000, mode=Timer.PERIODIC, callback=lambda _: display_time())
+
+
+
+def buzzer_trigger_callback():
+    rtc = RTC()
+    _, _, _, _, hour, minute, second, _ = rtc.datetime()
+    if not(hour == 7 and minute == 55 and second == 0):
+        return
+    DUTY = 400
+    buzzer = PWM(Pin(5), freq=1000, duty_u16=DUTY)
+    buzzer.duty_u16(DUTY)
+    print("Buzzer triggered!")
+    sleep(2)
+    buzzer.deinit()
+
+buzzer_trigger_timer = Timer()
+buzzer_trigger_timer.init(period=1000, mode=Timer.PERIODIC, callback=lambda _: buzzer_trigger_callback())
+
 
 # enter stable state
 led = Pin("LED", Pin.OUT)
