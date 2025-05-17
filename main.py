@@ -3,8 +3,9 @@ from time import sleep
 import ntptime
 import roboto
 import ssd1306
-from machine import I2C, RTC, Pin, Timer, PWM
+from machine import I2C, PWM, RTC, Pin, Timer
 from network import STA_IF, WLAN
+from utime import ticks_diff, ticks_ms
 from writer import Writer
 
 ntptime.timeout = 10
@@ -66,25 +67,49 @@ clock_setting_timer.init(period=5000, mode=Timer.PERIODIC, callback=lambda _: di
 
 
 def buzzer_trigger_callback():
+    global mode
     rtc = RTC()
     _, _, _, _, hour, minute, second, _ = rtc.datetime()
-    if not(hour == 7 and minute == 55 and second == 0):
-        return
-    DUTY = 400
-    buzzer = PWM(Pin(5), freq=1000, duty_u16=DUTY)
-    buzzer.duty_u16(DUTY)
-    print("Buzzer triggered!")
-    sleep(2)
-    buzzer.deinit()
+    if (hour == 5 and minute == 0 and second == 0):
+        mode = "buzzer"
+
 
 buzzer_trigger_timer = Timer()
 buzzer_trigger_timer.init(period=1000, mode=Timer.PERIODIC, callback=lambda _: buzzer_trigger_callback())
 
+button_clicked_at = ticks_ms()
 
+def handle_button_interrupt(pin):
+    global button_clicked_at
+    global mode
+    if ticks_diff(ticks_ms(), button_clicked_at) < 100:
+        return
+    else:
+        button_clicked_at = ticks_ms()
+    if mode == "stable":
+        mode = "buzzer"
+        print("Button pressed: Buzzer mode ON")
+    else:
+        mode = "stable"
+        print("Button pressed: Buzzer mode OFF")
+
+button = Pin(1, Pin.IN, Pin.PULL_UP)
+button.irq(trigger=Pin.IRQ_FALLING, handler=handle_button_interrupt)
 # enter stable state
 led = Pin("LED", Pin.OUT)
 
+DUTY = 4000
+buzzer = PWM(Pin(5), freq=1000, duty_u16=0)
+
+mode = "stable"
+
 while True:
-    led.value(not led.value())
-    print("LED is ON" if led.value() else "LED is OFF")
-    sleep(0.5)
+    if mode == "stable":
+        led.value(not led.value())
+        print("LED is ON" if led.value() else "LED is OFF")
+        sleep(0.5)
+    elif mode == "buzzer":
+        buzzer.duty_u16(DUTY)
+        sleep(0.5)
+        buzzer.duty_u16(0)
+        sleep(0.5)
