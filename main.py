@@ -1,5 +1,6 @@
 from time import sleep
 
+import asyncio
 import ntptime
 import roboto
 import ssd1306
@@ -7,6 +8,7 @@ from machine import I2C, PWM, RTC, Pin, Timer
 from network import STA_IF, WLAN
 from utime import ticks_diff, ticks_ms
 from writer import Writer
+from microdot import Microdot
 
 ntptime.timeout = 10
 
@@ -82,7 +84,7 @@ button_clicked_at = ticks_ms()
 def handle_button_interrupt(pin):
     global button_clicked_at
     global mode
-    if ticks_diff(ticks_ms(), button_clicked_at) < 100:
+    if ticks_diff(ticks_ms(), button_clicked_at) < 500:
         return
     else:
         button_clicked_at = ticks_ms()
@@ -103,13 +105,32 @@ buzzer = PWM(Pin(5), freq=1000, duty_u16=0)
 
 mode = "stable"
 
-while True:
-    if mode == "stable":
-        led.value(not led.value())
-        print("LED is ON" if led.value() else "LED is OFF")
-        sleep(0.5)
-    elif mode == "buzzer":
-        buzzer.duty_u16(DUTY)
-        sleep(0.5)
-        buzzer.duty_u16(0)
-        sleep(0.5)
+
+async def buzzer_task():
+    global mode
+    while True:
+        if mode == "stable":
+            led.value(not led.value())
+            print("LED is ON" if led.value() else "LED is OFF")
+            await asyncio.sleep(0.5)
+        elif mode == "buzzer":
+            buzzer.duty_u16(DUTY)
+            await asyncio.sleep(0.5)
+            buzzer.duty_u16(0)
+            await asyncio.sleep(0.5)
+
+
+app = Microdot()
+
+@app.route('/')
+async def index(request):
+    return 'Hello, world!'
+
+async def main():
+    asyncio.create_task(buzzer_task())
+    asyncio.create_task(app.start_server(debug=True))
+    while True:
+        await asyncio.sleep(10)
+
+asyncio.run(main())
+
