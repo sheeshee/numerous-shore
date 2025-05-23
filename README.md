@@ -16,6 +16,12 @@ SSID
 PASSWORD
 ```
 
+## Install dependencies
+
+Dependencies are contained in the lib folder.
+
+Subdirectories such as `lib/primitives` must be created manually before running xrun.
+
 # Notes
 
 If ampy can't connect make the port usable again
