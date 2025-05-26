@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cancel Countdown</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;padding:20px;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5}
+.container{text-align:center}
+.cancel-btn{font-size:24px;padding:40px 60px;background:#dc3545;color:white;border:none;border-radius:12px;cursor:pointer;box-shadow:0 4px 8px rgba(0,0,0,0.2);transition:all 0.2s}
+.cancel-btn:hover{background:#c82333;box-shadow:0 6px 12px rgba(0,0,0,0.3);transform:translateY(-2px)}
+.cancel-btn:active{transform:translateY(0);box-shadow:0 2px 4px rgba(0,0,0,0.2)}
+.countdown-display{font-size:48px;font-weight:bold;color:#333;margin-bottom:20px;font-family:monospace}
+.target-time{font-size:18px;color:#666;margin-bottom:30px}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="countdown-display" id="countdown">--</div>
+<div class="target-time">Target: <span id="target-time">$time</span></div>
+<form method="POST" action="/cancel">
+<button type="submit" class="cancel-btn">CANCEL COUNTDOWN</button>
+</form>
+</div>
+<script>
+// Target time will be replaced by server with actual datetime
+const targetTimeStr = '$date $time';
+let targetTime;
+
+try {
+  targetTime = new Date(targetTimeStr);
+} catch (e) {
+  document.getElementById('countdown').textContent = 'Invalid time';
+}
+
+function updateCountdown() {
+  if (!targetTime || isNaN(targetTime)) return;
+
+  const now = new Date();
+  const diff = targetTime - now;
+
+  if (diff <= 0) {
+    document.getElementById('countdown').textContent = '0';
+    return;
+  }
+
+  const seconds = Math.ceil(diff / 1000);
+  document.getElementById('countdown').textContent = seconds;
+}
+
+// Update immediately and then every second
+updateCountdown();
+setInterval(updateCountdown, 1000);
+</script>
+</body>
+</html>
