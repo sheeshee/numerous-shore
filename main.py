@@ -67,15 +67,25 @@ clock_setting_timer = Timer()
 clock_setting_timer.init(period=5000, mode=Timer.PERIODIC, callback=lambda _: display_time())
 
 
-async def beep_buzzer():
-    while True:
+async def run_wake_up_sequence():
+    # beep buzzer until button is pressed
+    while not button.press.is_set():
         buzzer.duty_u16(DUTY)
         await asyncio.sleep(0.5)
         buzzer.duty_u16(0)
         await asyncio.sleep(0.5)
-        if button.press.is_set():
-            button.press.clear()
-            break
+    button.press.clear()
+
+    # itiate countdown
+    for i in range(10, 0, -1):
+        display.fill(0)
+        display.text(str(i), 0, 0, 1)
+        display.show()
+        await asyncio.sleep(1)
+
+    bell_pin.on()  # turn on bell
+    await button.press.wait()  # wait for button press to stop ringing
+    bell_pin.off()  # turn off bell
 
 
 # enter stable state
@@ -85,6 +95,8 @@ DUTY = 4000
 button = EButton(button_pin)
 button.press_func = None
 buzzer = PWM(Pin(5), freq=200, duty_u16=0)
+
+bell_pin = Pin(0, Pin.OUT)
 
 alarm_hour = 5
 alarm_minute = 0
@@ -115,7 +127,7 @@ async def handle_alarm():
         if task is not None:
             task.cancel()
         print(f"Alarm set for {alarm_hour:02}:{alarm_minute:02}")
-        task = asyncio.create_task(schedule(beep_buzzer, hrs=alarm_hour, mins=alarm_minute, secs=0))
+        task = asyncio.create_task(schedule(run_wake_up_sequence, hrs=alarm_hour, mins=alarm_minute, secs=0))
         await asyncio.sleep(0)
 
 
