@@ -1,12 +1,13 @@
 from time import sleep
 
 import asyncio
+from primitives import EButton
+from sched.sched import schedule
 import ntptime
 import roboto
 import ssd1306
 from machine import I2C, PWM, RTC, Pin, Timer
 from network import STA_IF, WLAN
-from utime import ticks_diff, ticks_ms
 from writer import Writer
 from microdot import Microdot
 
@@ -72,52 +73,31 @@ def buzzer_trigger_callback():
     global mode
     rtc = RTC()
     _, _, _, _, hour, minute, second, _ = rtc.datetime()
-    if (hour == 5 and minute == 0 and second == 0):
-        mode = "buzzer"
+    if (hour == 8 and minute == 2 and second == 0):
+        button.press.set()
 
 
-buzzer_trigger_timer = Timer()
-buzzer_trigger_timer.init(period=1000, mode=Timer.PERIODIC, callback=lambda _: buzzer_trigger_callback())
-
-button_clicked_at = ticks_ms()
-
-def handle_button_interrupt(pin):
-    global button_clicked_at
-    global mode
-    if ticks_diff(ticks_ms(), button_clicked_at) < 500:
-        return
-    else:
-        button_clicked_at = ticks_ms()
-    if mode == "stable":
-        mode = "buzzer"
-        print("Button pressed: Buzzer mode ON")
-    else:
-        mode = "stable"
-        print("Button pressed: Buzzer mode OFF")
-
-button = Pin(1, Pin.IN, Pin.PULL_UP)
-button.irq(trigger=Pin.IRQ_FALLING, handler=handle_button_interrupt)
-# enter stable state
-led = Pin("LED", Pin.OUT)
-
-DUTY = 4000
-buzzer = PWM(Pin(5), freq=1000, duty_u16=0)
-
-mode = "stable"
-
-
-async def buzzer_task():
-    global mode
+async def beep_buzzer():
     while True:
-        if mode == "stable":
-            led.value(not led.value())
-            print("LED is ON" if led.value() else "LED is OFF")
-            await asyncio.sleep(0.5)
-        elif mode == "buzzer":
+        await button.press.wait()
+        button.press.clear()
+        while True:
             buzzer.duty_u16(DUTY)
             await asyncio.sleep(0.5)
             buzzer.duty_u16(0)
             await asyncio.sleep(0.5)
+            if button.press.is_set():
+                button.press.clear()
+                break
+
+
+# enter stable state
+led = Pin("LED", Pin.OUT)
+button_pin = Pin(1, Pin.IN, Pin.PULL_UP)
+DUTY = 4000
+button = EButton(button_pin)
+button.press_func = None
+buzzer = PWM(Pin(5), freq=200, duty_u16=0)
 
 
 app = Microdot()
@@ -126,9 +106,25 @@ app = Microdot()
 async def index(request):
     return 'Hello, world!'
 
+
+def trigger_buzzer():
+    if not button.press.is_set():
+        print("Schedule triggered buzzer")
+        button.press.set()
+
+
+
+def cancel_scheduled_task(task):
+    await button.long.wait()
+    print("canceling scheduled task")
+    task.cancel()
+
+
 async def main():
-    asyncio.create_task(buzzer_task())
-    asyncio.create_task(app.start_server(debug=True))
+    # task = asyncio.create_task(schedule(trigger_buzzer, hrs=None, mins=None, secs=range(0, 60, 10)))
+    asyncio.create_task(beep_buzzer())
+    # asyncio.create_task(cancel_scheduled_task(task))
+    asyncio.create_task(app.start_server(debug=True, port=80))
     while True:
         await asyncio.sleep(10)
 
