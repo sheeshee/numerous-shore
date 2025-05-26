@@ -68,15 +68,6 @@ clock_setting_timer = Timer()
 clock_setting_timer.init(period=5000, mode=Timer.PERIODIC, callback=lambda _: display_time())
 
 
-
-def buzzer_trigger_callback():
-    global mode
-    rtc = RTC()
-    _, _, _, _, hour, minute, second, _ = rtc.datetime()
-    if (hour == 8 and minute == 2 and second == 0):
-        button.press.set()
-
-
 async def beep_buzzer():
     while True:
         buzzer.duty_u16(DUTY)
@@ -129,24 +120,8 @@ async def handle_alarm():
         await asyncio.sleep(0)
 
 
-def trigger_buzzer():
-    if not button.press.is_set():
-        print("Schedule triggered buzzer")
-        button.press.set()
-
-
-
-def cancel_scheduled_task(task):
-    await button.long.wait()
-    print("canceling scheduled task")
-    task.cancel()
-
-
 async def main():
-    # task = asyncio.create_task(schedule(trigger_buzzer, hrs=None, mins=None, secs=range(0, 60, 10)))
-    # asyncio.create_task(beep_buzzer())
     asyncio.create_task(handle_alarm())
-    # asyncio.create_task(cancel_scheduled_task(task))
     asyncio.create_task(app.start_server(debug=True, port=80))
     while True:
         await asyncio.sleep(10)
