@@ -1,7 +1,7 @@
 from time import sleep
 
 import asyncio
-from primitives import EButton
+from primitives import EButton, broker, RingbufQueue
 from sched.sched import schedule
 import ntptime
 import roboto
@@ -79,16 +79,13 @@ def buzzer_trigger_callback():
 
 async def beep_buzzer():
     while True:
-        await button.press.wait()
-        button.press.clear()
-        while True:
-            buzzer.duty_u16(DUTY)
-            await asyncio.sleep(0.5)
-            buzzer.duty_u16(0)
-            await asyncio.sleep(0.5)
-            if button.press.is_set():
-                button.press.clear()
-                break
+        buzzer.duty_u16(DUTY)
+        await asyncio.sleep(0.5)
+        buzzer.duty_u16(0)
+        await asyncio.sleep(0.5)
+        if button.press.is_set():
+            button.press.clear()
+            break
 
 
 # enter stable state
@@ -99,12 +96,37 @@ button = EButton(button_pin)
 button.press_func = None
 buzzer = PWM(Pin(5), freq=200, duty_u16=0)
 
+alarm_hour = 5
+alarm_minute = 0
+
 
 app = Microdot()
 
 @app.route('/')
 async def index(request):
     return 'Hello, world!'
+
+
+@app.route('/set_alarm')
+async def set_alarm(request):
+    print(request.args)
+    alarm_hour = int(request.args.get('hour', ['5']))
+    alarm_minute = int(request.args.get('minute', ['0']))
+    # send new time to handle_alarm task
+    broker.publish('alarm/set', (alarm_hour, alarm_minute))
+    return f'Alarm set for {alarm_hour:02}:{alarm_minute:02}'
+
+
+async def handle_alarm():
+    queue = RingbufQueue(20)
+    broker.subscribe('alarm/set', queue)
+    task = None
+    async for topic, (alarm_hour, alarm_minute) in queue:
+        if task is not None:
+            task.cancel()
+        print(f"Alarm set for {alarm_hour:02}:{alarm_minute:02}")
+        task = asyncio.create_task(schedule(beep_buzzer, hrs=alarm_hour, mins=alarm_minute, secs=0))
+        await asyncio.sleep(0)
 
 
 def trigger_buzzer():
@@ -122,7 +144,8 @@ def cancel_scheduled_task(task):
 
 async def main():
     # task = asyncio.create_task(schedule(trigger_buzzer, hrs=None, mins=None, secs=range(0, 60, 10)))
-    asyncio.create_task(beep_buzzer())
+    # asyncio.create_task(beep_buzzer())
+    asyncio.create_task(handle_alarm())
     # asyncio.create_task(cancel_scheduled_task(task))
     asyncio.create_task(app.start_server(debug=True, port=80))
     while True:
