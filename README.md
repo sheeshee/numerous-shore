@@ -16,6 +16,14 @@ SSID
 PASSWORD
 ```
 
+## Static Files
+
+Static and templates must be copied to the device.
+
+```bash
+uv run mpr put templates/index.html templates/
+```
+
 ## Install dependencies
 
 Dependencies are contained in the lib folder.

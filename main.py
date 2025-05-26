@@ -9,8 +9,10 @@ import ssd1306
 from machine import I2C, PWM, RTC, Pin, Timer
 from network import STA_IF, WLAN
 from writer import Writer
-from microdot import Microdot
+from microdot import Microdot, Response, redirect
 
+
+Response.default_content_type = 'text/html'
 ntptime.timeout = 10
 
 
@@ -98,25 +100,59 @@ buzzer = PWM(Pin(5), freq=200, duty_u16=0)
 
 bell_pin = Pin(0, Pin.OUT)
 
+ALARM_MODE_OFF = 0
+ALARM_MODE_ON = 1
+ALARM_MODE_SNOOZE = 2
+ALARM_MODE_RINGING = 3
+
+alarm_status_dict = {
+    ALARM_MODE_OFF: 'Off',
+    ALARM_MODE_ON: 'On',
+    ALARM_MODE_SNOOZE: 'Snoozed',
+    ALARM_MODE_RINGING: 'Ringing',
+}
+
 alarm_hour = 5
 alarm_minute = 0
-
+alarm_mode = ALARM_MODE_OFF
 
 app = Microdot()
+with open('templates/index.html', 'r') as f:
+    template = f.read()
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 async def index(request):
-    return 'Hello, world!'
+    global alarm_hour, alarm_minute, alarm_mode
+    return template.replace('$alarm_time', f'{alarm_hour:02}:{alarm_minute:02}')\
+        .replace('$alarm_status', alarm_status_dict[alarm_mode])
 
 
-@app.route('/set_alarm')
+@app.route('/', methods=['POST'])
 async def set_alarm(request):
-    print(request.args)
-    alarm_hour = int(request.args.get('hour', ['5']))
-    alarm_minute = int(request.args.get('minute', ['0']))
+    global alarm_hour, alarm_minute, alarm_mode
+    alarm_time_str = request.form.get('time')
+    hour, minute = map(int, alarm_time_str.split(':'))
+
+    alarm_hour = hour
+    alarm_minute = minute
+    alarm_mode = ALARM_MODE_ON
     # send new time to handle_alarm task
     broker.publish('alarm/set', (alarm_hour, alarm_minute))
-    return f'Alarm set for {alarm_hour:02}:{alarm_minute:02}'
+    return template.replace('$alarm_time', f'{alarm_hour:02}:{alarm_minute:02}')\
+        .replace('$alarm_status', alarm_status_dict[alarm_mode])
+
+@app.route('/toggle', methods=['POST'])
+async def toggle_alarm(request):
+    global alarm_mode
+    if alarm_mode == ALARM_MODE_OFF:
+        alarm_mode = ALARM_MODE_ON
+    elif alarm_mode == ALARM_MODE_ON:
+        alarm_mode = ALARM_MODE_OFF
+    else:
+        alarm_mode = ALARM_MODE_OFF
+    # send new status to handle_alarm task
+    broker.publish('alarm/status', alarm_mode)
+    return redirect('/')
 
 
 async def handle_alarm():
