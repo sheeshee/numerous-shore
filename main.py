@@ -55,7 +55,6 @@ print('Time set successfully!')
 def display_time():
     rtc = RTC()
     _, _, _, _, hour, minute, _, _ = rtc.datetime()
-    display.fill(0)
     writer = Writer(display, roboto, verbose=False)
     Writer.set_textpos(display, 32, 0)
     writer.printstring(f"{hour:02}:{minute:02}")
@@ -120,8 +119,19 @@ async def handle_alarm():
         await asyncio.sleep(0)
 
 
+async def handle_alarm_text():
+    queue = RingbufQueue(20)
+    broker.subscribe('alarm/set', queue)
+    async for topic, (alarm_hour, alarm_minute) in queue:
+        display.rect(0, 0, 128, 16, 0, True)
+        display.text(f'{alarm_hour:02}:{alarm_minute:02}', 0, 0, 1)
+        display.show()
+        await asyncio.sleep(2)
+
+
 async def main():
     asyncio.create_task(handle_alarm())
+    asyncio.create_task(handle_alarm_text())
     asyncio.create_task(app.start_server(debug=True, port=80))
     while True:
         await asyncio.sleep(10)
