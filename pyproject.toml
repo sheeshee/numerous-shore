@@ -13,4 +13,11 @@ dependencies = [
     "mpr>=1.31",
     "mpremote>=1.25.0",
     "mpy-cross>=1.25.0.post2",
+    "pytest>=8.3.5",
+]
+
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
 ]

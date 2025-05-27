@@ -1,5 +1,3 @@
-from time import sleep
-
 import asyncio
 from primitives import EButton, broker, RingbufQueue
 from sched.sched import schedule
@@ -7,7 +5,6 @@ import ntptime
 import roboto
 import ssd1306
 from machine import I2C, PWM, RTC, Pin, Timer
-from network import STA_IF, WLAN
 from writer import Writer
 from microdot import Microdot, Response, redirect
 
@@ -21,34 +18,6 @@ i2c = I2C(0, scl=Pin(17), sda=Pin(16))
 display = ssd1306.SSD1306_I2C(128, 64, i2c)
 display.text('Starting...', 0, 40, 1)
 display.show()
-
-# init internet connection
-with open('credentials.txt', 'r') as f:
-    ssid, password = f.read().strip().split('\n')
-wlan = WLAN(STA_IF)
-wlan.active(True)
-wlan.connect(ssid, password)
-
-# Wait for Wi-Fi connection
-connection_timeout = 10
-while connection_timeout > 0:
-    if wlan.status() >= 3:
-        break
-    connection_timeout -= 1
-    print('Waiting for Wi-Fi connection...')
-    sleep(1)
-
-# Check if connection is successful
-if wlan.status() != 3:
-    display.fill(0)
-    display.text('Connection error', 0, 40, 1)
-    display.show()
-    raise RuntimeError('Failed to establish a network connection')
-else:
-    print('Connection successful!')
-    network_info = wlan.ifconfig()
-    print('IP address:', network_info[0])
-
 
 print('Fetching time from NTP server...')
 ntptime.settime()
