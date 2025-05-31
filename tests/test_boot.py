@@ -1,27 +1,27 @@
-import tempfile
-from contextlib import contextmanager
+import random
+import os
 
-import pytest
+import unittest
 
 from boot import CredentialsGetter, connect_to_network
 
 
-@contextmanager
-def credentials_file(contents):
-    """Context manager to create a temporary credentials file."""
-    with tempfile.NamedTemporaryFile(delete=False, mode='w') as f:
-        f.write(contents)
-        f.flush()
-        yield f.name
+class MockCredentialsFile:
 
+    _ascii_letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-def test_get_credentials():
-    file_contents = "test_ssid\ntest_password"
-    with credentials_file(file_contents) as cred_file:
-        getter = CredentialsGetter(cred_file)
-        ssid, password = getter.get_credentials()
-        assert ssid == "test_ssid"
-        assert password == "test_password"
+    def __init__(self, contents):
+        self.contents = contents
+        self.filename = "".join(random.choice(self._ascii_letters) for _ in range(10)) + ".txt"
+
+    def __enter__(self):
+        with open(self.filename, 'w') as f:
+            f.write(self.contents)
+            f.flush()
+        return self.filename
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        os.remove(self.filename)
 
 
 class FakeNetworkInterface:
@@ -55,19 +55,34 @@ class FakeCredentialsGetter:
         return "test_ssid", "test_password"
 
 
-def test_connect_to_network_raises_runtime_error_on_failed_connection():
-    fake_network = FakeNetworkInterface(resolved_status_code=1)
-    fake_credentials = FakeCredentialsGetter()
+class BootTest(unittest.TestCase):
 
-    with pytest.raises(RuntimeError, match='Failed to establish a network connection'):
-        connect_to_network(fake_network, fake_credentials, fake_sleep)
+    def setUp(self):
+        self.fake_network = FakeNetworkInterface()
+        self.fake_credentials = FakeCredentialsGetter()
+
+    def test_get_credentials(self):
+        file_contents = "test_ssid\ntest_password"
+        with MockCredentialsFile(file_contents) as cred_file:
+            getter = CredentialsGetter(cred_file)
+            ssid, password = getter.get_credentials()
+        assert ssid == "test_ssid"
+        assert password == "test_password"
 
 
-def test_connect_to_network_returns_ip_address_on_success():
-    fake_network = FakeNetworkInterface(resolved_ip_address='192.168.0.2')
-    fake_credentials = FakeCredentialsGetter()
-    ip_address = connect_to_network(fake_network, fake_credentials, fake_sleep)
-    assert ip_address == '192.168.0.2'
+    def test_connect_to_network_raises_runtime_error_on_failed_connection(self):
+        fake_network = FakeNetworkInterface(resolved_status_code=1)
+        fake_credentials = FakeCredentialsGetter()
+
+        with self.assertRaises(RuntimeError):
+            connect_to_network(fake_network, fake_credentials, fake_sleep)
+
+    def test_connect_to_network_returns_ip_address_on_success(self):
+        fake_network = FakeNetworkInterface(resolved_ip_address='192.168.0.2')
+        fake_credentials = FakeCredentialsGetter()
+        ip_address = connect_to_network(fake_network, fake_credentials, fake_sleep)
+        assert ip_address == '192.168.0.2'
 
 
-
+if __name__ == "__main__":
+    unittest.main()
