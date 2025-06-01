@@ -42,28 +42,6 @@ ntptime.timeout = 10
 # clock_setting_timer.init(period=5000, mode=Timer.PERIODIC, callback=lambda _: display_time())
 #
 #
-# async def run_wake_up_sequence():
-#     global alarm_mode
-#     # beep buzzer until button is pressed
-#     while not button.press.is_set():
-#         buzzer.duty_u16(DUTY)
-#         await asyncio.sleep(0.5)
-#         buzzer.duty_u16(0)
-#         await asyncio.sleep(0.5)
-#     button.press.clear()
-#     alarm_mode = ALARM_MODE_SNOOZE  # Set alarm mode to snooze
-#
-#     # itiate countdown
-#     for i in range(10, 0, -1):
-#         display.fill(0)
-#         display.text(str(i), 0, 0, 1)
-#         display.show()
-#         await asyncio.sleep(1)
-#
-#     bell_pin.on()  # turn on bell
-#     alarm_mode = ALARM_MODE_RINGING  # Set alarm mode to ringing
-#     await button.press.wait()  # wait for button press to stop ringing
-#     bell_pin.off()  # turn off bell
 class Alarm:
 
     def __init__(self):
@@ -90,6 +68,7 @@ class Waker:
         self.first_alarm = first_alarm
         self.second_alarm = second_alarm
         self.snooze_method = snooze_method
+        self.stop_event = asyncio.Event()
 
     async def run(self):
         self.state = self.States.FIRST_ALARM
@@ -97,11 +76,12 @@ class Waker:
         await self.button.press.wait()
         self.first_alarm.stop()
         self.state = self.States.SNOOZED
-        self.snooze_method()
+        await self.snooze_method()
         self.state = self.States.SECOND_ALARM
         self.second_alarm.start()
-        # await self.stop
-        # self.second_alarm.stop()
+        await self.stop_event.wait()
+        self.stop_event.clear()
+        self.second_alarm.stop()
         self.state = self.States.IDLE
 
 
