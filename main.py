@@ -68,22 +68,32 @@ class Waker:
         self.first_alarm = first_alarm
         self.second_alarm = second_alarm
         self.snooze_method = snooze_method
-        self.stop_event = asyncio.Event()
 
     async def run(self):
-        self.state = self.States.FIRST_ALARM
-        self.first_alarm.start()
-        await self.button.press.wait()
-        self.first_alarm.stop()
-        self.state = self.States.SNOOZED
-        await self.snooze_method()
-        self.state = self.States.SECOND_ALARM
-        self.second_alarm.start()
-        await self.stop_event.wait()
-        self.stop_event.clear()
-        self.second_alarm.stop()
-        self.state = self.States.IDLE
+        try:
+            self.state = self.States.FIRST_ALARM
+            self.first_alarm.start()
+            await self.button.press.wait()
+            self.first_alarm.stop()
+            self.state = self.States.SNOOZED
+            await self.snooze_method()
+            self.state = self.States.SECOND_ALARM
+            self.second_alarm.start()
+            for _ in range(60):
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            print(' >>> wake sequence cancelled')
+            pass
+        finally:
+            self.first_alarm.stop()
+            self.second_alarm.stop()
+            self.state = self.States.IDLE
 
+    # def start(self):
+    #     self._task = asyncio.create_task(self.run())
+    #
+    # def stop(self):
+    #     self._task.cancel()
 
 #
 #

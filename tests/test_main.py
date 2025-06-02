@@ -159,7 +159,7 @@ class WakerTestCase(unittest.TestCase):
         self.assertTrue(self.first_alarm.is_running)
         self.assertFalse(self.second_alarm.is_running)
 
-    def test_wake_sequence_enters_countdown_after_button_press(self):
+    def test_wake_sequence_enters_snooze_after_button_press(self):
         global hold_snooze
         hold_snooze = True
 
@@ -192,7 +192,7 @@ class WakerTestCase(unittest.TestCase):
 
         asyncio.run(test())
 
-    def test_wake_sequence_rings_second_alarm_after_button_press_and_countdown(self):
+    def test_wake_sequence_rings_second_alarm_after_snooze(self):
 
         async def fake_snooze(): pass
 
@@ -200,7 +200,7 @@ class WakerTestCase(unittest.TestCase):
 
         async def test():
             asyncio.create_task(waker.run())
-            for _ in range(10):
+            for _ in range(3):
                 await asyncio.sleep(0)
             self.button.press.set()
             self.button.press.clear()
@@ -213,22 +213,68 @@ class WakerTestCase(unittest.TestCase):
         self.assertFalse(self.first_alarm.is_running)
         self.assertTrue(self.second_alarm.is_running)
 
-    def test_wake_sequence_returns_to_idle_after_second_alarm(self):
+    def test_cancel_wake_sequence_during_first_alarm(self):
 
         async def fake_snooze(): pass
 
         waker = Waker(self.button, self.first_alarm, self.second_alarm, fake_snooze)
 
         async def test():
-            asyncio.create_task(waker.run())
+            task = asyncio.create_task(waker.run())
+            for _ in range(3):
+                await asyncio.sleep(0)
+            task.cancel()
+            for _ in range(3):
+                await asyncio.sleep(0)
+
+        asyncio.run(test())
+
+        self.assertEqual(waker.state, Waker.States.IDLE)
+        self.assertFalse(self.first_alarm.is_running)
+        self.assertFalse(self.second_alarm.is_running)
+
+    def test_cancel_wake_sequence_during_snooze(self):
+
+        async def fake_snooze():
             for _ in range(10):
+                await asyncio.sleep(1)
+
+        waker = Waker(self.button, self.first_alarm, self.second_alarm, fake_snooze)
+
+        async def test():
+            task = asyncio.create_task(waker.run())
+            for _ in range(3):
                 await asyncio.sleep(0)
             self.button.press.set()
             self.button.press.clear()
-            for _ in range(10):
+            for _ in range(3):
                 await asyncio.sleep(0)
-            waker.stop_event.set()
-            for _ in range(10):
+            task.cancel()
+            for _ in range(3):
+                await asyncio.sleep(0)
+
+        asyncio.run(test())
+
+        self.assertEqual(waker.state, Waker.States.IDLE)
+        self.assertFalse(self.first_alarm.is_running)
+        self.assertFalse(self.second_alarm.is_running)
+
+    def test_cancel_wake_sequence_during_second_alarm(self):
+
+        async def fake_snooze(): pass
+
+        waker = Waker(self.button, self.first_alarm, self.second_alarm, fake_snooze)
+
+        async def test():
+            task = asyncio.create_task(waker.run())
+            for _ in range(3):
+                await asyncio.sleep(0)
+            self.button.press.set()
+            self.button.press.clear()
+            for _ in range(3):
+                await asyncio.sleep(0)
+            task.cancel()
+            for _ in range(3):
                 await asyncio.sleep(0)
 
         asyncio.run(test())
