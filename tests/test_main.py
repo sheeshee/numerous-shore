@@ -1,11 +1,11 @@
 import asyncio
 import time
-from machine import Pin
+from machine import Pin, PWM
 
 import unittest
 from primitives import broker, EButton
 
-from main import AlarmSchedulingAgent, Scheduler, ping, Messages, Waker
+from main import AlarmSchedulingAgent, BuzzerAlarm, Scheduler, ping, Messages, Waker, BuzzerAlarm
 
 
 
@@ -89,7 +89,6 @@ class SchedulerTestCase(unittest.TestCase):
         self.assertEqual(some_value, 1)
 
     def test_set_cancels_previous_task(self):
-
 
         class FakeTask:
 
@@ -282,6 +281,54 @@ class WakerTestCase(unittest.TestCase):
         self.assertEqual(waker.state, Waker.States.IDLE)
         self.assertFalse(self.first_alarm.is_running)
         self.assertFalse(self.second_alarm.is_running)
+
+
+class BuzzerAlarmTestCase(unittest.TestCase):
+
+    class FakePWM:
+
+        def __init__(self):
+            self._duty_u16 = 0
+            self.beep_count = 0
+
+        def duty_u16(self, value=None):
+            if value is not None:
+                self._duty_u16 = value
+                if value > 0:
+                    self.beep_count += 1
+            return self._duty_u16
+
+    def setUp(self):
+        self.buzzer = self.FakePWM()
+
+    def test_start(self):
+
+        alarm = BuzzerAlarm(self.buzzer)
+
+        async def test():
+            alarm.start()
+            await asyncio.sleep(1)
+
+        asyncio.run(test())
+
+        self.assertTrue(alarm.is_running)
+        self.assertGreaterEqual(self.buzzer.beep_count, 1)
+
+    def test_stop(self):
+
+        alarm = BuzzerAlarm(self.buzzer)
+
+        async def test():
+            alarm.start()
+            await asyncio.sleep(1)
+            alarm.stop()
+            await asyncio.sleep(0.5)
+
+        asyncio.run(test())
+
+        self.assertFalse(alarm.is_running)
+        self.assertEqual(self.buzzer.duty_u16(), 0)
+        self.assertGreaterEqual(self.buzzer.beep_count, 1)
 
 
 if __name__ == '__main__':

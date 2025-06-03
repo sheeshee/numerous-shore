@@ -1,9 +1,20 @@
 import asyncio
+from machine import Pin, PWM
 
 from microdot import Microdot, Response, redirect
-from primitives import broker, RingbufQueue
+from primitives import broker, RingbufQueue, EButton
 from sched.sched import schedule as async_schedule
 import ntptime
+
+
+BUTTON = EButton(Pin(1, Pin.IN, Pin.PULL_UP))
+BUZZER = PWM(Pin(5), freq=200, duty_u16=0)
+BELL = Pin(0, Pin.OUT)
+LED = Pin("LED", Pin.OUT)
+DUTY = 4000
+
+
+BELL.off()  # be sure BELL is OFF
 
 
 class Messages:
@@ -54,6 +65,37 @@ class Alarm:
         self.is_running = False
 
 
+class BuzzerAlarm(Alarm):
+
+    def __init__(self, buzzer_pwm):
+        super().__init__()
+        self.buzzer = buzzer_pwm
+        self._task = None
+
+    async def buzz(self):
+        try:
+            while True:
+                self.buzzer.duty_u16(0)
+                await asyncio.sleep(0.5)
+                self.buzzer.duty_u16(DUTY)
+                await asyncio.sleep(0.5)
+        except asyncio.CancelledError:
+            print(' >>> buzzer task cancelled')
+        finally:
+            self.buzzer.duty_u16(0)
+
+    def start(self):
+        super().start()
+        self._task = asyncio.create_task(self.buzz())
+
+    def stop(self):
+        super().stop()
+        if self._task is not None:
+            self._task.cancel()
+        self.buzzer.duty_u16(0)
+
+
+
 class Waker:
 
     class States:
@@ -83,7 +125,6 @@ class Waker:
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             print(' >>> wake sequence cancelled')
-            pass
         finally:
             self.first_alarm.stop()
             self.second_alarm.stop()
@@ -95,19 +136,6 @@ class Waker:
     # def stop(self):
     #     self._task.cancel()
 
-#
-#
-# # enter stable state
-# led = Pin("LED", Pin.OUT)
-# button_pin = Pin(1, Pin.IN, Pin.PULL_UP)
-# DUTY = 4000
-# button = EButton(button_pin)
-# button.press_func = None
-# buzzer = PWM(Pin(5), freq=200, duty_u16=0)
-#
-# bell_pin = Pin(0, Pin.OUT)
-# bell_pin.off()  # ensure bell is off at start
-#
 # ALARM_MODE_OFF = 0
 # ALARM_MODE_ON = 1
 # ALARM_MODE_SNOOZE = 2
@@ -268,7 +296,11 @@ def run_forever():
 async def main():
     asyncio.create_task(app.start_server(debug=True, port=80))
     scheduler = Scheduler(schedule)
-    AlarmSchedulingAgent(wake_sequence, scheduler).create_task()
+    buzzer_alarm = None
+    bell_alarm = None
+    snooze = None
+    waker = Waker(BUTTON, buzzer_alarm, bell_alarm, snooze)
+    AlarmSchedulingAgent(waker.start, scheduler).create_task()
     # asyncio.create_task(handle_alarm())
     # asyncio.create_task(handle_alarm_text())
     run_forever()
