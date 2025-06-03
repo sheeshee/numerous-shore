@@ -1,12 +1,13 @@
 import asyncio
-import time
-from machine import Pin, PWM
+from machine import Pin
 
 import unittest
 from primitives import broker, EButton
 
-from main import AlarmSchedulingAgent, BuzzerAlarm, Scheduler, ping, Messages, Waker, BuzzerAlarm
-
+from main import (
+    AlarmSchedulingAgent, BuzzerAlarm, Scheduler,
+    ping, Messages, Waker, BellAlarm
+)
 
 
 class WebRoutesTestCase(unittest.TestCase):
@@ -329,6 +330,28 @@ class BuzzerAlarmTestCase(unittest.TestCase):
         self.assertFalse(alarm.is_running)
         self.assertEqual(self.buzzer.duty_u16(), 0)
         self.assertGreaterEqual(self.buzzer.beep_count, 1)
+
+
+class BellAlarmTestCase(unittest.TestCase):
+
+    def test_start(self):
+
+        alarm = BellAlarm(Pin(0, Pin.OUT))
+
+        alarm.start()
+
+        self.assertTrue(alarm.is_running)
+        self.assertTrue(alarm.bell.value())
+
+    def test_stop(self):
+
+        alarm = BellAlarm(Pin(0, Pin.OUT))
+
+        alarm.start()
+        alarm.stop()
+
+        self.assertFalse(alarm.is_running)
+        self.assertFalse(alarm.bell.value())
 
 
 if __name__ == '__main__':

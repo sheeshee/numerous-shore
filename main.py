@@ -72,7 +72,7 @@ class BuzzerAlarm(Alarm):
         self.buzzer = buzzer_pwm
         self._task = None
 
-    async def buzz(self):
+    async def _buzz(self):
         try:
             while True:
                 self.buzzer.duty_u16(0)
@@ -86,7 +86,7 @@ class BuzzerAlarm(Alarm):
 
     def start(self):
         super().start()
-        self._task = asyncio.create_task(self.buzz())
+        self._task = asyncio.create_task(self._buzz())
 
     def stop(self):
         super().stop()
@@ -94,6 +94,21 @@ class BuzzerAlarm(Alarm):
             self._task.cancel()
         self.buzzer.duty_u16(0)
 
+
+class BellAlarm(Alarm):
+
+    def __init__(self, bell_pin):
+        super().__init__()
+        self.bell = bell_pin
+        self._task = None
+
+    def start(self):
+        super().start()
+        self.bell.on()
+
+    def stop(self):
+        super().stop()
+        self.bell.off()
 
 
 class Waker:
