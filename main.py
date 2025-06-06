@@ -1,10 +1,13 @@
 import asyncio
-from machine import Pin, PWM
+from machine import Pin, PWM, I2C, RTC
 
 from microdot import Microdot, Response, redirect
 from primitives import broker, RingbufQueue, EButton
 from sched.sched import schedule as async_schedule
 import ntptime
+from ssd1306 import SSD1306_I2C
+from writer import Writer
+import roboto
 
 
 BUTTON = EButton(Pin(1, Pin.IN, Pin.PULL_UP))
@@ -12,6 +15,7 @@ BUZZER = PWM(Pin(5), freq=200, duty_u16=0)
 BELL = Pin(0, Pin.OUT)
 LED = Pin("LED", Pin.OUT)
 DUTY = 4000
+SCREEN = SSD1306_I2C(128, 64, I2C(0, scl=Pin(17), sda=Pin(16)))
 
 
 BELL.off()  # be sure BELL is OFF
@@ -19,40 +23,13 @@ BELL.off()  # be sure BELL is OFF
 
 class Messages:
     SET_ALARM = 'alarm/set'
+    SNOOZE = 'alarm/snooze'
 
 
 Response.default_content_type = 'text/html'
 ntptime.timeout = 10
-#
-#
-# # init display
-# i2c = I2C(0, scl=Pin(17), sda=Pin(16))
-# display = ssd1306.SSD1306_I2C(128, 64, i2c)
-# display.text('Starting...', 0, 40, 1)
-# display.show()
-#
-# print('Fetching time from NTP server...')
-# ntptime.settime()
-# print('Time set successfully!')
-#
-# def display_time():
-#     rtc = RTC()
-#     _, _, _, _, hour, minute, _, _ = rtc.datetime()
-#     writer = Writer(display, roboto, verbose=False)
-#     Writer.set_textpos(display, 32, 0)
-#     writer.printstring(f"{hour:02}:{minute:02}")
-#     display.show()
 
 
-
-#
-# display_time()
-#
-#
-# clock_setting_timer = Timer()
-# clock_setting_timer.init(period=5000, mode=Timer.PERIODIC, callback=lambda _: display_time())
-#
-#
 class Alarm:
 
     def __init__(self):
@@ -111,6 +88,20 @@ class BellAlarm(Alarm):
         self.bell.off()
 
 
+async def snooze():
+    current_time = RTC().datetime()
+    hour, minute = current_time[4], current_time[5]
+    minute += 1
+    if minute >= 60:
+        minute = 0
+        hour += 1
+        if hour >= 24:
+            hour = 0
+    broker.publish(Messages.SNOOZE, (hour, minute))
+    while (hour, minute) != RTC().datetime()[4:6]:
+        await asyncio.sleep(1)
+
+
 class Waker:
 
     class States:
@@ -145,11 +136,11 @@ class Waker:
             self.second_alarm.stop()
             self.state = self.States.IDLE
 
-    # def start(self):
-    #     self._task = asyncio.create_task(self.run())
-    #
-    # def stop(self):
-    #     self._task.cancel()
+    def start(self):
+        self._task = asyncio.create_task(self.run())
+
+    def stop(self):
+        self._task.cancel()
 
 # ALARM_MODE_OFF = 0
 # ALARM_MODE_ON = 1
@@ -283,17 +274,100 @@ class AlarmSchedulingAgent:
             self.scheduler.set(self.wake_sequence, hour, minute)
             await asyncio.sleep(0)
 
-    def create_task(self):
+    def start(self):
         return asyncio.create_task(self.main())
-#
-# async def handle_alarm_text():
-#     queue = RingbufQueue(20)
-#     broker.subscribe('alarm/set', queue)
-#     async for topic, (alarm_hour, alarm_minute) in queue:
-#         display.rect(0, 0, 128, 16, 0, True)
-#         display.text(f'{alarm_hour:02}:{alarm_minute:02}', 0, 0, 1)
-#         display.show()
-#         await asyncio.sleep(2)
+
+
+class Display:
+
+    def __init__(self, device):
+        self.device = device
+        self.writer = Writer(device, roboto, verbose=False)
+        self.clock = (0, 0)
+        self.alarm = (0, 0)
+        self.countdown = (0, 0)
+
+    def update_clock(self, hour, minute):
+        if self.clock == (hour, minute):
+            return
+        self.clock = (hour, minute)
+        self.device.rect(0, 16, 128, 64, 0, True)
+        self.writer.set_textpos(self.device, 32, 0)
+        self.writer.printstring(f"{self.clock[0]:02}:{self.clock[1]:02}")
+        self.device.show()
+
+    def update_alarm(self, hour, minute):
+        if self.alarm == (hour, minute):
+            return
+        self.alarm = (hour, minute)
+        self.device.rect(0, 0, 128, 16, 0, True)
+        self.device.text(f'{self.alarm[0]:02}:{self.alarm[1]:02}', 0, 0, 1)
+        self.device.show()
+
+    def update_countdown(self, minute, second):
+        print(f'Updating countdown to {minute:02}:{second:02}')
+        if self.countdown == (minute, second):
+            print('Countdown already set to this value, skipping update.')
+            return
+        self.countdown = (minute, second)
+        self.device.rect(0, 16, 128, 64, 0, True)
+        self.writer.set_textpos(self.device, 32, 0)
+        self.writer.printstring(f"{self.countdown[0]:02}:{self.countdown[1]:02}")
+        self.device.show()
+
+
+class DisplayAgent:
+
+    def __init__(self, display, rtc):
+        self.display = display
+        self.rtc = rtc
+        self._countdown_active = False
+
+    def start(self):
+        asyncio.create_task(self.clock())
+        asyncio.create_task(self.alarm())
+        asyncio.create_task(self.await_countdown())
+
+    async def clock(self):
+        while True:
+            _, _, _, _, hour, minute, _, _ = self.rtc.datetime()
+            if not self._countdown_active:
+                self.display.update_clock(hour, minute)
+            await asyncio.sleep(1)
+
+    async def alarm(self):
+        queue = RingbufQueue(3)
+        broker.subscribe(Messages.SET_ALARM, queue)
+        async for topic, (alarm_hour, alarm_minute) in queue:
+            self.display.update_alarm(alarm_hour, alarm_minute)
+            await asyncio.sleep(1)
+
+    async def await_countdown(self):
+        queue = RingbufQueue(3)
+        broker.subscribe(Messages.SNOOZE, queue)
+        async for topic, (hour, minute) in queue:
+            await self.countdown(hour, minute)
+            await asyncio.sleep(1)
+
+    async def countdown(self, target_hour, target_minute):
+        self._countdown_active = True
+        seconds_to = self.seconds_to(target_hour, target_minute)
+        while seconds_to > 0:
+            minutes = seconds_to // 60
+            secondes = seconds_to % 60
+            self.display.update_countdown(minutes, secondes)
+            seconds_to = self.seconds_to(target_hour, target_minute)
+            await asyncio.sleep(0.5)
+        self._countdown_active = False
+
+    def seconds_to(self, hour, minute):
+        _, _, _, _, current_hour, current_minute, current_second, _ = self.rtc.datetime()
+        print('current_hour:', current_hour, 'current_minute:', current_minute)
+        print('target_hour:', hour, 'target_minute:', minute)
+        seconds_to = (hour * 3600 + minute * 60) - (current_hour * 3600 + current_minute * 60 + current_second)
+        if seconds_to < 0:
+            seconds_to += 24 * 3600
+        return seconds_to
 
 
 def run_forever():
@@ -311,22 +385,16 @@ def run_forever():
 async def main():
     asyncio.create_task(app.start_server(debug=True, port=80))
     scheduler = Scheduler(schedule)
-    buzzer_alarm = None
-    bell_alarm = None
-    snooze = None
+    buzzer_alarm = BuzzerAlarm(BUZZER)
+    bell_alarm = BellAlarm(BELL)
+    display = Display(SCREEN)
     waker = Waker(BUTTON, buzzer_alarm, bell_alarm, snooze)
-    AlarmSchedulingAgent(waker.start, scheduler).create_task()
-    # asyncio.create_task(handle_alarm())
-    # asyncio.create_task(handle_alarm_text())
+    AlarmSchedulingAgent(waker.start, scheduler).start()
+    DisplayAgent(display, RTC()).start()
     run_forever()
 
 
 if __name__ == '__main__':
-    from primitives import EButton, broker, RingbufQueue
-    import ntptime
-    import roboto
-    import ssd1306
-    from machine import I2C, PWM, RTC, Pin, Timer
-    from writer import Writer
-
+    ntptime.settime()  # Set the RTC time from NTP
     asyncio.run(main())
+    print("Main loop exited, cleaning up...")

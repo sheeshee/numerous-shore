@@ -1,12 +1,13 @@
 import asyncio
 from machine import Pin
+import time
 
 import unittest
 from primitives import broker, EButton
 
 from main import (
-    AlarmSchedulingAgent, BuzzerAlarm, Scheduler,
-    ping, Messages, Waker, BellAlarm
+    SCREEN, AlarmSchedulingAgent, BuzzerAlarm, Scheduler,
+    ping, Messages, Waker, BellAlarm, Display, DisplayAgent
 )
 
 
@@ -35,7 +36,7 @@ class AlarmSchedulingAgentTestCase(unittest.TestCase):
         def fake_method(): pass
         agent = AlarmSchedulingAgent(fake_method, self.FakeScheduler())
         self.assertTrue(
-            isinstance(agent.create_task(), asyncio.Task)
+            isinstance(agent.start(), asyncio.Task)
         )
 
     def test_schedule_method_on_subscription_message(self):
@@ -51,7 +52,7 @@ class AlarmSchedulingAgentTestCase(unittest.TestCase):
             broker.publish(Messages.SET_ALARM, (12, 30))
 
         async def test():
-            agent.create_task()
+            agent.start()
             asyncio.create_task(emit_alarm_set_message())
             for _ in range(3):
                 await asyncio.sleep(0)
@@ -352,6 +353,141 @@ class BellAlarmTestCase(unittest.TestCase):
 
         self.assertFalse(alarm.is_running)
         self.assertFalse(alarm.bell.value())
+
+
+class DisplayTestCase(unittest.TestCase):
+
+    def test_update_clock(self):
+        display = Display(SCREEN)
+        display.update_clock(12, 30)
+        time.sleep(0.1)  # allow the display to update
+        self.assertEqual(display.clock, (12, 30))
+
+    def test_update_alarm(self):
+        display = Display(SCREEN)
+        display.update_alarm(12, 30)
+        time.sleep(0.1)
+        self.assertEqual(display.alarm, (12, 30))
+
+    def test_update_countdown(self):
+        display = Display(SCREEN)
+        display.update_countdown(5, 0)
+        time.sleep(0.1)
+        self.assertEqual(display.countdown, (5, 0))
+
+
+class DisplayAgentTestCase(unittest.TestCase):
+
+    class FakeDisplay():
+
+        def __init__(self, rtc=None):
+            self._rtc = rtc
+            self.clock = (0, 0)
+            self.alarm = (0, 0)
+            self.countdown = (0, 0)
+
+        def update_clock(self, hour, minute):
+            self.clock = (hour, minute)
+
+        def update_alarm(self, hour, minute):
+            self.alarm = (hour, minute)
+
+        def update_countdown(self, hour, minute):
+            self.countdown = (hour, minute)
+            if self._rtc:
+                self._rtc.pass_time()
+
+    class FakeRTC:
+
+        def __init__(self, hour, minute):
+            self.hour = hour
+            self.minute = minute
+            self._second = 0
+
+        def datetime(self):
+            return (2023, 10, 1, 0, self.hour, self.minute, 0, 0)
+
+        def pass_time(self):
+            self._second += 1
+            if self._second >= 60:
+                self._second = 0
+                self.minute += 1
+                if self.minute >= 60:
+                    self.minute = 0
+                    self.hour += 1
+                    if self.hour >= 24:
+                        self.hour = 0
+
+    def test_displays_the_time(self):
+
+        rtc = self.FakeRTC(1, 2)
+        display = self.FakeDisplay(rtc)
+
+        agent = DisplayAgent(display, rtc)
+
+        async def test():
+            agent.start()
+            for _ in range(3):
+                await asyncio.sleep(0)
+
+        asyncio.run(test())
+
+        self.assertEqual(display.clock, (1, 2))
+
+    def test_update_alarm_time_on_message_reciept(self):
+
+        display = self.FakeDisplay()
+        rtc = self.FakeRTC(1, 2)
+
+        agent = DisplayAgent(display, rtc)
+
+        async def emit_alarm_time_message():
+            broker.publish(Messages.SET_ALARM, (12, 30))
+
+        async def test():
+            agent.start()
+            asyncio.create_task(emit_alarm_time_message())
+            for _ in range(3):
+                await asyncio.sleep(0)
+
+        asyncio.run(test())
+
+        self.assertEqual(display.alarm, (12, 30))
+
+    def test_countdown_updates_display(self):
+        display = self.FakeDisplay()
+        rtc = self.FakeRTC(5, 55)
+
+        agent = DisplayAgent(display, rtc)
+
+        async def emit_snooze_message():
+            broker.publish(Messages.SNOOZE, (6, 0))
+
+        async def test():
+            agent.start()
+            asyncio.create_task(emit_snooze_message())
+            for _ in range(3):
+                await asyncio.sleep(0)
+
+        asyncio.run(test())
+
+        self.assertEqual(display.countdown, (5, 0))
+
+    def test_to_seconds(self):
+        rtc = self.FakeRTC(0, 0)
+        display = self.FakeDisplay(rtc)
+
+        agent = DisplayAgent(display, rtc)
+
+        self.assertEqual(agent.seconds_to(0, 1), 60)
+
+    def test_to_seconds_wraps_around_midnight(self):
+        rtc = self.FakeRTC(23, 59)
+        display = self.FakeDisplay(rtc)
+
+        agent = DisplayAgent(display, rtc)
+
+        self.assertEqual(agent.seconds_to(0, 1), 120)
 
 
 if __name__ == '__main__':
