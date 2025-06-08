@@ -23,12 +23,21 @@ body{font-family:Arial,sans-serif;margin:0;padding:20px;display:flex;justify-con
 </form>
 </div>
 <script>
-// Target time will be replaced by server with actual datetime
-const targetTimeStr = '$date $time';
+// Target time will be replaced by server with HH:mm format
+const targetTimeStr = '$time';
 let targetTime;
 
 try {
-  targetTime = new Date(targetTimeStr);
+  const now = new Date();
+  const [hours, minutes] = targetTimeStr.split(':').map(Number);
+
+  // Create target time for today
+  targetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+
+  // If target time has already passed today, it must be tomorrow
+  if (targetTime <= now) {
+    targetTime.setDate(targetTime.getDate() + 1);
+  }
 } catch (e) {
   document.getElementById('countdown').textContent = 'Invalid time';
 }

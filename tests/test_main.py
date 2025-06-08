@@ -7,15 +7,117 @@ from primitives import broker, EButton
 
 from main import (
     SCREEN, AlarmSchedulingAgent, BuzzerAlarm, Scheduler,
-    ping, Messages, Waker, BellAlarm, Display, DisplayAgent
+    Messages, Waker, BellAlarm, Display, DisplayAgent,
+    app, state
 )
+
+from tests.microdot_test_client import TestClient
 
 
 class WebRoutesTestCase(unittest.TestCase):
 
     def test_ping(self):
-        result = asyncio.run(ping())
-        self.assertEqual(result, 'pong')
+
+        async def test():
+            client = TestClient(app)
+            res = await client.get('/ping')
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.text, 'pong')
+
+        asyncio.run(test())
+
+
+    def test_index_shows_alarm_time(self):
+
+        state.alarm_hour = 12
+        state.alarm_minute = 30
+
+        async def test():
+            client = TestClient(app)
+            res = await client.get('/')
+            self.assertEqual(res.status_code, 200)
+            self.assertIn('12:30', res.text)
+
+        asyncio.run(test())
+
+    def test_index_shows_alarm_state(self):
+
+        state.set_alarm_on()
+
+        async def test():
+            client = TestClient(app)
+            res = await client.get('/')
+            self.assertEqual(res.status_code, 200)
+            self.assertIn('ON', res.text)
+
+        asyncio.run(test())
+
+    def test_index_shows_countdown_when_alarm_snoozed(self):
+
+        state.snooze_to(12, 30)
+
+        async def test():
+            client = TestClient(app)
+            res = await client.get('/')
+            self.assertEqual(res.status_code, 200)
+            self.assertIn('cancel countdown', res.text.lower())
+            self.assertIn('12:30', res.text)
+
+        asyncio.run(test())
+
+    def test_cancel_countdown(self):
+
+        state.snooze_to(12, 30)
+
+        async def test():
+            client = TestClient(app)
+            res = await client.post('/cancel')
+            self.assertEqual(res.status_code, 302)
+            self.assertEqual(state.alarm_mode, state.AlarmModes.ON)
+
+        asyncio.run(test())
+
+    def test_toggle_alarm_on(self):
+
+        state.set_alarm_off()
+
+        async def test():
+            client = TestClient(app)
+            res = await client.post('/toggle')
+            self.assertEqual(res.status_code, 302)
+            self.assertEqual(state.alarm_mode, state.AlarmModes.ON)
+
+        asyncio.run(test())
+
+    def test_toggle_alarm_off(self):
+
+        state.set_alarm_on()
+
+        async def test():
+            client = TestClient(app)
+            res = await client.post('/toggle')
+            self.assertEqual(res.status_code, 302)
+            self.assertEqual(state.alarm_mode, state.AlarmModes.OFF)
+
+        asyncio.run(test())
+
+    def test_set_alarm_time(self):
+
+        state.alarm_hour = 0
+        state.alarm_minute = 0
+
+        async def test():
+            client = TestClient(app)
+            res = await client.post(
+                '/',
+                headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                body='time=12%3A30'
+            )
+            self.assertIn('12:30', res.text)
+            self.assertEqual(state.alarm_hour, 12)
+            self.assertEqual(state.alarm_minute, 30)
+
+        asyncio.run(test())
 
 
 class AlarmSchedulingAgentTestCase(unittest.TestCase):

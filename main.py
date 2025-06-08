@@ -21,9 +21,17 @@ SCREEN = SSD1306_I2C(128, 64, I2C(0, scl=Pin(17), sda=Pin(16)))
 BELL.off()  # be sure BELL is OFF
 
 
+with open('templates/set_alarm.html', 'r') as f:
+    TEMPLATE_SET_ALARM = f.read()
+
+with open('templates/cancel_countdown.html', 'r') as f:
+    TEMPLATE_CANCEL_COUNTDOWN = f.read()
+
+
 class Messages:
     SET_ALARM = 'alarm/set'
     SNOOZE = 'alarm/snooze'
+    CANCEL = 'alarm/cancel'
 
 
 Response.default_content_type = 'text/html'
@@ -138,104 +146,18 @@ class Waker:
 
     def start(self):
         self._task = asyncio.create_task(self.run())
+        asyncio.create_task(self.listen_for_stop())
 
     def stop(self):
         self._task.cancel()
 
-# ALARM_MODE_OFF = 0
-# ALARM_MODE_ON = 1
-# ALARM_MODE_SNOOZE = 2
-# ALARM_MODE_RINGING = 3
-#
-# alarm_status_dict = {
-#     ALARM_MODE_OFF: 'Off',
-#     ALARM_MODE_ON: 'On',
-#     ALARM_MODE_SNOOZE: 'Snoozed',
-#     ALARM_MODE_RINGING: 'Ringing',
-# }
-#
-# alarm_hour = 17
-# alarm_minute = 50
-# alarm_mode = ALARM_MODE_OFF  # Start in snooze mode
-#
-app = Microdot()
+    async def listen_for_stop(self):
+        queue = RingbufQueue(3)
+        broker.subscribe(Messages.CANCEL, queue)
+        async for _, _ in queue:
+            self.stop()
+            break
 
-@app.route('/ping', methods=['GET'])
-async def ping(*_):
-    return 'pong'
-#
-# with open('templates/set_alarm.html', 'r') as f:
-#     set_alarm_template = f.read()
-#
-# with open('templates/cancel_countdown.html', 'r') as f:
-#     cancel_countdown_template = f.read()
-#
-# @app.route('/', methods=['GET'])
-# async def index(request):
-#     global alarm_hour, alarm_minute, alarm_mode
-#     print(alarm_status_dict[alarm_mode])
-#     if alarm_mode == ALARM_MODE_SNOOZE:
-#         bell_minute = (alarm_minute + 1)
-#         bell_minute_adj = bell_minute % 60
-#         bell_hour = (alarm_hour + bell_minute // 60) + 1
-#         bell_hour_adj = bell_hour % 24
-#
-#         year, month, day, _, _, _, _, _ = RTC().datetime()
-#
-#         bell_day = day + (bell_hour // 24)
-#         bell_day_adj = bell_day % 31  # Simplified, does not account for month length
-#
-#         bell_month = month + (bell_day // 31)
-#         bell_month_adj = bell_month % 12
-#         bell_year = year + (bell_month // 12)
-#
-#         bell_time = f'{bell_hour_adj:02}:{bell_minute_adj:02}'
-#         date =  f'{bell_year:04}-{bell_month_adj:02}-{bell_day_adj:02}'
-#         # if snoozed, show cancel countdown
-#         return cancel_countdown_template.replace('$time', bell_time)\
-#                 .replace('$date', date)
-#     return set_alarm_template.replace('$alarm_time', f'{alarm_hour:02}:{alarm_minute:02}')\
-#         .replace('$alarm_status', alarm_status_dict[alarm_mode])
-
-#
-# @app.route('/', methods=['POST'])
-# async def set_alarm(request):
-#     global alarm_hour, alarm_minute, alarm_mode
-#     alarm_time_str = request.form.get('time')
-#     hour, minute = map(int, alarm_time_str.split(':'))
-#
-#     alarm_hour = hour
-#     alarm_minute = minute
-#     alarm_mode = ALARM_MODE_ON
-#     # send new time to handle_alarm task
-#     broker.publish('alarm/set', (alarm_hour, alarm_minute))
-#     return set_alarm_template.replace('$alarm_time', f'{alarm_hour:02}:{alarm_minute:02}')\
-#         .replace('$alarm_status', alarm_status_dict[alarm_mode])
-#
-# @app.route('/toggle', methods=['POST'])
-# async def toggle_alarm(request):
-#     global alarm_mode
-#     if alarm_mode == ALARM_MODE_OFF:
-#         alarm_mode = ALARM_MODE_ON
-#     elif alarm_mode == ALARM_MODE_ON:
-#         alarm_mode = ALARM_MODE_OFF
-#     else:
-#         alarm_mode = ALARM_MODE_OFF
-#     # send new status to handle_alarm task
-#     broker.publish('alarm/status', alarm_mode)
-#     return redirect('/')
-#
-#
-# @app.route('/cancel', methods=['POST'])
-# async def cancel_alarm(request):
-#     global alarm_mode
-#     if alarm_mode in (ALARM_MODE_RINGING, ALARM_MODE_SNOOZE):
-#         alarm_mode = ALARM_MODE_ON
-#         # send new status to handle_alarm task
-#         broker.publish('alarm/status', alarm_mode)
-#     return redirect('/')
-#
-#
 
 def schedule(method, hour, minute):
     return asyncio.create_task(async_schedule(method, hrs=hour, mins=minute, secs=0))
@@ -305,9 +227,7 @@ class Display:
         self.device.show()
 
     def update_countdown(self, minute, second):
-        print(f'Updating countdown to {minute:02}:{second:02}')
         if self.countdown == (minute, second):
-            print('Countdown already set to this value, skipping update.')
             return
         self.countdown = (minute, second)
         self.device.rect(0, 16, 128, 64, 0, True)
@@ -351,6 +271,7 @@ class DisplayAgent:
 
     async def countdown(self, target_hour, target_minute):
         self._countdown_active = True
+        state.snooze_to(target_hour, target_minute)
         seconds_to = self.seconds_to(target_hour, target_minute)
         while seconds_to > 0:
             minutes = seconds_to // 60
@@ -362,12 +283,110 @@ class DisplayAgent:
 
     def seconds_to(self, hour, minute):
         _, _, _, _, current_hour, current_minute, current_second, _ = self.rtc.datetime()
-        print('current_hour:', current_hour, 'current_minute:', current_minute)
-        print('target_hour:', hour, 'target_minute:', minute)
         seconds_to = (hour * 3600 + minute * 60) - (current_hour * 3600 + current_minute * 60 + current_second)
         if seconds_to < 0:
             seconds_to += 24 * 3600
         return seconds_to
+
+
+class State:
+
+    class AlarmModes:
+        OFF = 0
+        ON = 1
+        SNOOZED = 2
+        RINGING = 3
+
+    def __init__(self):
+        self.alarm_hour = 0
+        self.alarm_minute = 0
+        self.target_hour = 0
+        self.target_minute = 0
+        self.alarm_mode = 0  # 0: OFF, 1: ON, 2: SNOOZE, 3: RINGING
+
+    def get_alarm_mode(self):
+        if self.alarm_mode == self.AlarmModes.OFF:
+            return 'OFF'
+        elif self.alarm_mode == self.AlarmModes.ON:
+            return 'ON'
+        elif self.alarm_mode == self.AlarmModes.SNOOZED:
+            return 'SNOOZED'
+        elif self.alarm_mode == self.AlarmModes.RINGING:
+            return 'RINGING'
+        else:
+            return 'UNKNOWN'
+
+    def set_alarm_on(self):
+        self.alarm_mode = self.AlarmModes.ON
+
+    def set_alarm_off(self):
+        self.alarm_mode = self.AlarmModes.OFF
+
+    def set_alarm_snoozed(self):
+        self.alarm_mode = self.AlarmModes.SNOOZED
+
+    def alarm_is_snoozed(self):
+        return self.alarm_mode == self.AlarmModes.SNOOZED
+
+    def alarm_is_off(self):
+        return self.alarm_mode == self.AlarmModes.OFF
+
+    def snooze_to(self, hour, minute):
+        self.target_hour = hour
+        self.target_minute = minute
+        self.set_alarm_snoozed()
+
+
+app = Microdot()
+state = State()
+
+
+def make_index(hour, minute, mode):
+    return TEMPLATE_SET_ALARM\
+        .replace('$alarm_time', f'{hour:02}:{minute:02}')\
+        .replace('$alarm_status', mode)
+
+
+@app.route('/ping', methods=['GET'])
+async def ping(*_):
+    return 'pong'
+
+
+@app.route('/', methods=['GET'])
+async def index(request):
+    global state
+    if state.alarm_is_snoozed():
+        bell_time = f'{state.target_hour:02}:{state.target_minute:02}'
+        return TEMPLATE_CANCEL_COUNTDOWN.replace('$time', bell_time)
+    return make_index(state.alarm_hour, state.alarm_minute, state.get_alarm_mode())
+
+
+@app.route('/', methods=['POST'])
+async def set_alarm(request):
+    global state
+    alarm_time_str = request.form.get('time')
+    state.alarm_hour, state.alarm_minute = map(int, alarm_time_str.split(':'))
+    state.set_alarm_on()
+    # send new time to handle_alarm task
+    broker.publish(Messages.SET_ALARM, (state.alarm_hour, state.alarm_minute))
+    return make_index(state.alarm_hour, state.alarm_minute, state.get_alarm_mode())
+
+
+@app.route('/toggle', methods=['POST'])
+async def toggle_alarm(request):
+    global state
+    if state.alarm_is_off():
+        state.set_alarm_on()
+    else:
+        state.set_alarm_off()
+    return redirect('/')
+
+
+@app.route('/cancel', methods=['POST'])
+async def cancel_alarm(request):
+    state.set_alarm_on()  # Reset the alarm state
+    broker.publish(Messages.CANCEL)
+    return redirect('/')
 
 
 def run_forever():
@@ -383,7 +402,6 @@ def run_forever():
 
 
 async def main():
-    asyncio.create_task(app.start_server(debug=True, port=80))
     scheduler = Scheduler(schedule)
     buzzer_alarm = BuzzerAlarm(BUZZER)
     bell_alarm = BellAlarm(BELL)
@@ -391,6 +409,7 @@ async def main():
     waker = Waker(BUTTON, buzzer_alarm, bell_alarm, snooze)
     AlarmSchedulingAgent(waker.start, scheduler).start()
     DisplayAgent(display, RTC()).start()
+    asyncio.create_task(app.start_server(debug=True, port=80))
     run_forever()
 
 
