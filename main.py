@@ -29,6 +29,7 @@ with open('templates/cancel_countdown.html', 'r') as f:
 
 
 class Messages:
+    ALARM_OFF = 'alarm/disarm'
     SET_ALARM = 'alarm/set'
     SNOOZE = 'alarm/snooze'
     CANCEL = 'alarm/cancel'
@@ -218,9 +219,11 @@ class Display:
         self.writer.printstring(f"{self.clock[0]:02}:{self.clock[1]:02}")
         self.device.show()
 
+    def hide_alarm(self):
+        self.device.rect(0, 0, 128, 16, 0, True)
+        self.device.show()
+
     def update_alarm(self, hour, minute):
-        if self.alarm == (hour, minute):
-            return
         self.alarm = (hour, minute)
         self.device.rect(0, 0, 128, 16, 0, True)
         self.device.text(f'{self.alarm[0]:02}:{self.alarm[1]:02}', 0, 0, 1)
@@ -258,8 +261,13 @@ class DisplayAgent:
     async def alarm(self):
         queue = RingbufQueue(3)
         broker.subscribe(Messages.SET_ALARM, queue)
-        async for topic, (alarm_hour, alarm_minute) in queue:
-            self.display.update_alarm(alarm_hour, alarm_minute)
+        broker.subscribe(Messages.ALARM_OFF, queue)
+        async for topic, params in queue:
+            if topic == Messages.ALARM_OFF:
+                self.display.hide_alarm()
+            else:
+                alarm_hour, alarm_minute = params
+                self.display.update_alarm(alarm_hour, alarm_minute)
             await asyncio.sleep(1)
 
     async def await_countdown(self):
@@ -377,8 +385,10 @@ async def toggle_alarm(request):
     global state
     if state.alarm_is_off():
         state.set_alarm_on()
+        broker.publish(Messages.SET_ALARM, (state.alarm_hour, state.alarm_minute))
     else:
         state.set_alarm_off()
+        broker.publish(Messages.ALARM_OFF)
     return redirect('/')
 
 

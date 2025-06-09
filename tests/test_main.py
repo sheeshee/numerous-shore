@@ -486,6 +486,7 @@ class DisplayAgentTestCase(unittest.TestCase):
             self._rtc = rtc
             self.clock = (0, 0)
             self.alarm = (0, 0)
+            self.show_alarm = True
             self.countdown = (0, 0)
 
         def update_clock(self, hour, minute):
@@ -498,6 +499,9 @@ class DisplayAgentTestCase(unittest.TestCase):
             self.countdown = (hour, minute)
             if self._rtc:
                 self._rtc.pass_time()
+
+        def hide_alarm(self):
+            self.show_alarm = False
 
     class FakeRTC:
 
@@ -555,6 +559,27 @@ class DisplayAgentTestCase(unittest.TestCase):
         asyncio.run(test())
 
         self.assertEqual(display.alarm, (12, 30))
+
+    def test_hide_alarm_time_on_deactivation_message(self):
+
+        display = self.FakeDisplay()
+        display.show_alarm = True
+        rtc = self.FakeRTC(1, 2)
+
+        agent = DisplayAgent(display, rtc)
+
+        async def emit_alarm_deactivation_message():
+            broker.publish(Messages.ALARM_OFF, None)
+
+        async def test():
+            agent.start()
+            asyncio.create_task(emit_alarm_deactivation_message())
+            for _ in range(3):
+                await asyncio.sleep(0)
+
+        asyncio.run(test())
+
+        self.assertFalse(display.show_alarm)
 
     def test_countdown_updates_display(self):
         display = self.FakeDisplay()
