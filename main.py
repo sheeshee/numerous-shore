@@ -8,6 +8,7 @@ import ntptime
 from ssd1306 import SSD1306_I2C
 from writer import Writer
 import roboto
+from datetime import datetime, timezone, timedelta
 
 
 BUTTON = EButton(Pin(1, Pin.IN, Pin.PULL_UP))
@@ -37,6 +38,8 @@ class Messages:
 
 Response.default_content_type = 'text/html'
 ntptime.timeout = 10
+
+TIMEZONE = timezone(timedelta(hours=1))  # Set timezone to UTC+1
 
 
 class Alarm:
@@ -98,8 +101,7 @@ class BellAlarm(Alarm):
 
 
 async def snooze():
-    current_time = RTC().datetime()
-    hour, minute = current_time[4], current_time[5]
+    hour, minute, _ = get_time()
     minute += 1
     if minute >= 60:
         minute = 0
@@ -107,7 +109,7 @@ async def snooze():
         if hour >= 24:
             hour = 0
     broker.publish(Messages.SNOOZE, (hour, minute))
-    while (hour, minute) != RTC().datetime()[4:6]:
+    while (hour, minute) != get_time()[0:2]:
         await asyncio.sleep(1)
 
 
@@ -175,9 +177,11 @@ class Scheduler:
         self.task = None
 
     def set(self, method, hour, minute):
+        trigger_time = datetime(2023, 1, 1, hour, minute, 0, tzinfo=TIMEZONE)
+        utc_trigger_time = trigger_time.astimezone(timezone.utc)
         if self.task is not None:
             self.task.cancel()
-        self.task = self.schedule(method, hour, minute)
+        self.task = self.schedule(method, utc_trigger_time.hour, utc_trigger_time.minute)
 
 
 class AlarmSchedulingAgent:
@@ -239,11 +243,18 @@ class Display:
         self.device.show()
 
 
+
+def get_time():
+    """Returns a tuple of hour, minute, second"""
+    dt = datetime.now(TIMEZONE)
+    return dt.hour, dt.minute, dt.second
+
+
 class DisplayAgent:
 
-    def __init__(self, display, rtc):
+    def __init__(self, display, get_time_method):
         self.display = display
-        self.rtc = rtc
+        self.get_time = get_time_method
         self._countdown_active = False
 
     def start(self):
@@ -253,7 +264,7 @@ class DisplayAgent:
 
     async def clock(self):
         while True:
-            _, _, _, _, hour, minute, _, _ = self.rtc.datetime()
+            hour, minute, _ = self.get_time()
             if not self._countdown_active:
                 self.display.update_clock(hour, minute)
             await asyncio.sleep(1)
@@ -290,7 +301,7 @@ class DisplayAgent:
         self._countdown_active = False
 
     def seconds_to(self, hour, minute):
-        _, _, _, _, current_hour, current_minute, current_second, _ = self.rtc.datetime()
+        current_hour, current_minute, current_second = self.get_time()
         seconds_to = (hour * 3600 + minute * 60) - (current_hour * 3600 + current_minute * 60 + current_second)
         if seconds_to < 0:
             seconds_to += 24 * 3600
@@ -418,7 +429,7 @@ async def main():
     display = Display(SCREEN)
     waker = Waker(BUTTON, buzzer_alarm, bell_alarm, snooze)
     AlarmSchedulingAgent(waker.start, scheduler).start()
-    DisplayAgent(display, RTC()).start()
+    DisplayAgent(display, get_time).start()
     asyncio.create_task(app.start_server(debug=True, port=80))
     run_forever()
 

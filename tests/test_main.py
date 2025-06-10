@@ -510,8 +510,8 @@ class DisplayAgentTestCase(unittest.TestCase):
             self.minute = minute
             self._second = 0
 
-        def datetime(self):
-            return (2023, 10, 1, 0, self.hour, self.minute, 0, 0)
+        def __call__(self):
+            return (self.hour, self.minute, self._second)
 
         def pass_time(self):
             self._second += 1
