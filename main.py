@@ -1,5 +1,5 @@
 import asyncio
-from machine import Pin, PWM, I2C, RTC
+from machine import Pin, PWM, I2C
 
 from microdot import Microdot, Response, redirect
 from primitives import broker, RingbufQueue, EButton
