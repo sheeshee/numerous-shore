@@ -145,6 +145,7 @@ class Waker:
         finally:
             self.first_alarm.stop()
             self.second_alarm.stop()
+            self.button.press.clear()
             self.state = self.States.IDLE
 
     def start(self):
