@@ -285,8 +285,17 @@ class DisplayAgent:
     async def await_countdown(self):
         queue = RingbufQueue(3)
         broker.subscribe(Messages.SNOOZE, queue)
-        async for topic, (hour, minute) in queue:
-            await self.countdown(hour, minute)
+        broker.subscribe(Messages.CANCEL, queue)
+        task = None
+        async for topic, payload in queue:
+            if topic == Messages.SNOOZE:
+                hour, minute = payload
+                task = asyncio.create_task(self.countdown(hour, minute))
+            elif topic == Messages.CANCEL and task is not None:
+                task.cancel()
+                self._countdown_active = False
+                hour, minute, _ = self.get_time()
+                self.display.update_clock(hour, minute)
             await asyncio.sleep(1)
 
     async def countdown(self, target_hour, target_minute):
