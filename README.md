@@ -45,6 +45,15 @@ This will also change main.py to main.mpy, which is not recognised by Micropytho
 uv run mpr put main.py .
 ```
 
+# Run Tests
+
+Run tests by mounting the local file system on the device and running the tests in the `tests` folder.
+
+
+```bash
+uv run mpr --mount . run tests/test_main.py
+```
+
 # Notes
 
 If ampy can't connect make the port usable again
