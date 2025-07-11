@@ -1,17 +1,96 @@
 import asyncio
 from machine import Pin
 import time
+import random
 
 import unittest
 from primitives import broker, EButton
 
-from main import (
+from app import (
     SCREEN, AlarmSchedulingAgent, BuzzerAlarm, Scheduler,
     Messages, Waker, BellAlarm, Display, DisplayAgent,
-    app, state
+    server, state, connect_to_network, CredentialsGetter
 )
 
 from tests.microdot_test_client import TestClient
+
+
+class MockCredentialsFile:
+
+    _ascii_letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    def __init__(self, contents):
+        self.contents = contents
+        self.filename = "".join(random.choice(self._ascii_letters) for _ in range(10)) + ".txt"
+
+    def __enter__(self):
+        with open(self.filename, 'w') as f:
+            f.write(self.contents)
+            f.flush()
+        return self.filename
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        os.remove(self.filename)
+
+
+class FakeNetworkInterface:
+    """A mock network interface for testing purposes."""
+    def __init__(self, resolved_ip_address='192.168.0.1', resolved_status_code=3):
+        self.status_code = 0
+        self.resolved_status_code = resolved_status_code
+        self.resolved_ip_address = resolved_ip_address
+
+    def active(self, state):
+        pass
+
+    def connect(self, ssid, password):
+        self.status_code = self.resolved_status_code
+
+    def status(self):
+        return self.status_code
+
+    def ifconfig(self):
+        return (self.resolved_ip_address,)
+
+
+def fake_sleep(seconds):
+    """A fake sleep function that does nothing."""
+    pass
+
+
+class FakeCredentialsGetter:
+    """A mock credentials getter for testing purposes."""
+    def get_credentials(self):
+        return "test_ssid", "test_password"
+
+
+class NetworkTest(unittest.TestCase):
+
+    def setUp(self):
+        self.fake_network = FakeNetworkInterface()
+        self.fake_credentials = FakeCredentialsGetter()
+
+    def test_get_credentials(self):
+        file_contents = "test_ssid\ntest_password"
+        with MockCredentialsFile(file_contents) as cred_file:
+            getter = CredentialsGetter(cred_file)
+            ssid, password = getter.get_credentials()
+        assert ssid == "test_ssid"
+        assert password == "test_password"
+
+
+    def test_connect_to_network_raises_runtime_error_on_failed_connection(self):
+        fake_network = FakeNetworkInterface(resolved_status_code=1)
+        fake_credentials = FakeCredentialsGetter()
+
+        with self.assertRaises(RuntimeError):
+            connect_to_network(fake_network, fake_credentials, fake_sleep)
+
+    def test_connect_to_network_returns_ip_address_on_success(self):
+        fake_network = FakeNetworkInterface(resolved_ip_address='192.168.0.2')
+        fake_credentials = FakeCredentialsGetter()
+        ip_address = connect_to_network(fake_network, fake_credentials, fake_sleep)
+        assert ip_address == '192.168.0.2'
 
 
 class WebRoutesTestCase(unittest.TestCase):
@@ -19,7 +98,7 @@ class WebRoutesTestCase(unittest.TestCase):
     def test_ping(self):
 
         async def test():
-            client = TestClient(app)
+            client = TestClient(server)
             res = await client.get('/ping')
             self.assertEqual(res.status_code, 200)
             self.assertEqual(res.text, 'pong')
@@ -33,7 +112,7 @@ class WebRoutesTestCase(unittest.TestCase):
         state.alarm_minute = 30
 
         async def test():
-            client = TestClient(app)
+            client = TestClient(server)
             res = await client.get('/')
             self.assertEqual(res.status_code, 200)
             self.assertIn('12:30', res.text)
@@ -45,7 +124,7 @@ class WebRoutesTestCase(unittest.TestCase):
         state.set_alarm_on()
 
         async def test():
-            client = TestClient(app)
+            client = TestClient(server)
             res = await client.get('/')
             self.assertEqual(res.status_code, 200)
             self.assertIn('ON', res.text)
@@ -57,7 +136,7 @@ class WebRoutesTestCase(unittest.TestCase):
         state.snooze_to(12, 30)
 
         async def test():
-            client = TestClient(app)
+            client = TestClient(server)
             res = await client.get('/')
             self.assertEqual(res.status_code, 200)
             self.assertIn('cancel countdown', res.text.lower())
@@ -70,7 +149,7 @@ class WebRoutesTestCase(unittest.TestCase):
         state.snooze_to(12, 30)
 
         async def test():
-            client = TestClient(app)
+            client = TestClient(server)
             res = await client.post('/cancel')
             self.assertEqual(res.status_code, 302)
             self.assertEqual(state.alarm_mode, state.AlarmModes.ON)
@@ -82,7 +161,7 @@ class WebRoutesTestCase(unittest.TestCase):
         state.set_alarm_off()
 
         async def test():
-            client = TestClient(app)
+            client = TestClient(server)
             res = await client.post('/toggle')
             self.assertEqual(res.status_code, 302)
             self.assertEqual(state.alarm_mode, state.AlarmModes.ON)
@@ -94,7 +173,7 @@ class WebRoutesTestCase(unittest.TestCase):
         state.set_alarm_on()
 
         async def test():
-            client = TestClient(app)
+            client = TestClient(server)
             res = await client.post('/toggle')
             self.assertEqual(res.status_code, 302)
             self.assertEqual(state.alarm_mode, state.AlarmModes.OFF)
@@ -107,7 +186,7 @@ class WebRoutesTestCase(unittest.TestCase):
         state.alarm_minute = 0
 
         async def test():
-            client = TestClient(app)
+            client = TestClient(server)
             res = await client.post(
                 '/',
                 headers={'Content-Type': 'application/x-www-form-urlencoded'},

@@ -30,6 +30,21 @@ Dependencies are contained in the lib folder.
 
 Subdirectories such as `lib/primitives` must be created manually before running xrun.
 
+
+## Compile MPY files
+
+mpr can cross-compile the python files to MPY files for the Pico W using `xrun`
+
+```bash
+uv run mpr xrun main
+```
+
+This will also change main.py to main.mpy, which is not recognised by Micropython when booting! If you wan to run the compiled code on boot, you must also copy over the main.py file:
+
+```bash
+uv run mpr put main.py .
+```
+
 # Notes
 
 If ampy can't connect make the port usable again
