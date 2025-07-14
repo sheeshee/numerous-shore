@@ -207,11 +207,15 @@ class AlarmSchedulingAgentTestCase(unittest.TestCase):
             self.hour = None
             self.minute = None
             self.method = None
+            self.cancelled = False
 
         def set(self, method, hour, minute):
             self.hour = hour
             self.minute = minute
             self.method = method
+
+        def cancel(self):
+            self.cancelled = True
 
     def test_create_task(self):
         def fake_method(): pass
@@ -243,6 +247,27 @@ class AlarmSchedulingAgentTestCase(unittest.TestCase):
         self.assertEqual(scheduler.hour, 12)
         self.assertEqual(scheduler.minute, 30)
         self.assertEqual(scheduler.method, fake_wake_sequence)
+
+    def test_cancel_scheduled_task_on_alarm_off_message(self):
+
+        def fake_wake_sequence():
+            pass
+
+        scheduler = self.FakeScheduler()
+        agent = AlarmSchedulingAgent(fake_wake_sequence, scheduler)
+
+        async def emit_alarm_off_message():
+            broker.publish(Messages.ALARM_OFF, None)
+
+        async def test():
+            agent.start()
+            asyncio.create_task(emit_alarm_off_message())
+            for _ in range(3):
+                await asyncio.sleep(0)
+
+        asyncio.run(test())
+
+        self.assertTrue(scheduler.cancelled)
 
 
 class SchedulerTestCase(unittest.TestCase):

@@ -231,6 +231,11 @@ class Scheduler:
             self.task.cancel()
         self.task = self.schedule(method, utc_trigger_time.hour, utc_trigger_time.minute)
 
+    def cancel(self):
+        if self.task is not None:
+            self.task.cancel()
+            self.task = None
+
 
 class AlarmSchedulingAgent:
     """
@@ -245,8 +250,13 @@ class AlarmSchedulingAgent:
     async def main(self):
         queue = RingbufQueue(3)
         broker.subscribe(Messages.SET_ALARM, queue)
-        async for _, (hour, minute) in queue:
-            self.scheduler.set(self.wake_sequence, hour, minute)
+        broker.subscribe(Messages.ALARM_OFF, queue)
+        async for topic, payload in queue:
+            if topic == Messages.SET_ALARM:
+                hour, minute = payload
+                self.scheduler.set(self.wake_sequence, hour, minute)
+            elif topic == Messages.ALARM_OFF:
+                self.scheduler.cancel()
             await asyncio.sleep(0)
 
     def start(self):
@@ -482,9 +492,9 @@ def run_forever():
 async def app():
     scheduler = Scheduler(schedule)
     buzzer_alarm = BuzzerAlarm(BUZZER)
-    bell_alarm = BellAlarm(BELL)
+    # bell_alarm = BellAlarm(BELL)
     display = Display(SCREEN)
-    waker = Waker(BUTTON, buzzer_alarm, bell_alarm, snooze)
+    waker = Waker(BUTTON, buzzer_alarm, buzzer_alarm, snooze)
     AlarmSchedulingAgent(waker.start, scheduler).start()
     DisplayAgent(display, get_time).start()
     asyncio.create_task(server.start_server(debug=True, port=80))
