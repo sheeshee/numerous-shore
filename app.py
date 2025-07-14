@@ -267,6 +267,7 @@ class Display:
 
     def __init__(self, device):
         self.device = device
+        self.device.contrast(0)  # even min contrast is easy to read
         self.writer = Writer(device, roboto, verbose=False)
         self.clock = (0, 0)
         self.alarm = (0, 0)
