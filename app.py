@@ -455,6 +455,7 @@ async def set_alarm(request):
     state.set_alarm_on()
     # send new time to handle_alarm task
     broker.publish(Messages.SET_ALARM, (state.alarm_hour, state.alarm_minute))
+    return redirect('/', status_code=303)
     return make_index(state.alarm_hour, state.alarm_minute, state.get_alarm_mode())
 
 
@@ -467,14 +468,14 @@ async def toggle_alarm(request):
     else:
         state.set_alarm_off()
         broker.publish(Messages.ALARM_OFF)
-    return redirect('/')
+    return redirect('/', status_code=303)
 
 
 @server.route('/cancel', methods=['POST'])
 async def cancel_alarm(request):
     state.set_alarm_on()  # Reset the alarm state
     broker.publish(Messages.CANCEL)
-    return redirect('/')
+    return redirect('/', status_code=303)
 
 
 def run_forever():
