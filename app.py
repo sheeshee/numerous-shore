@@ -148,8 +148,9 @@ class BellAlarm(Alarm):
 
 
 async def snooze():
+    snooze_minutes = 3
     hour, minute, _ = get_time()
-    minute += 1
+    minute += snooze_minutes
     if minute >= 60:
         minute = 0
         hour += 1
